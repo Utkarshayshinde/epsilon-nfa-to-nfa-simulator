@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login &amp; Authentication System using ε-NFA to NFA Conversion</title>
+<style>
+:root{--ink:#1c2433;--mut:#5d6b82;--line:#cfd6e4;--bg:#eef1f7;--navy:#1f3a68}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 "Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--navy);color:#fff;padding:14px 20px}
+h1{margin:0;font-size:1.3rem}
+nav{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--line)}
+button{font:inherit;font-weight:600;border:0;border-radius:6px;color:#fff;padding:7px 14px;cursor:pointer;background:var(--navy)}
+button:focus-visible,input:focus-visible{outline:3px solid #6a1b9a;outline-offset:2px}
+.wrap{display:grid;grid-template-columns:310px 1fr;gap:14px;padding:14px 16px;max-width:1300px;margin:auto}
+@media(max-width:860px){.wrap{grid-template-columns:1fr}}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:14px}
+h2{font-size:1rem;margin:0 0 8px;color:var(--navy)}
+label{display:block;font-size:.85rem;color:var(--mut);margin-top:8px}
+input[type=text],input[type=password]{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit}
+fieldset{border:0;padding:0;margin:0}
+fieldset:disabled{opacity:.45}
+svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.78rem;color:var(--mut);margin-top:4px}
+.legend i{display:inline-block;width:12px;height:12px;border:1px solid #37474f;vertical-align:-2px;margin-right:4px}
+.legend b{display:inline-block;width:20px;height:0;border-top:3px solid;vertical-align:3px;margin-right:4px}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{border:1px solid var(--line);padding:4px 8px;text-align:center}
+th{background:#e8edf7}
+tr.i td{background:#e8f5e9}tr.f td{background:#fff8e1}tr.x td{background:#ffebee}
+tr.cur td{outline:2px solid #6a1b9a;outline-offset:-2px}
+tr.pass td{background:#e8f5e9}tr.bad td{background:#ffebee}
+pre{margin:0;font:13px/1.45 Consolas,monospace;white-space:pre-wrap;max-height:300px;overflow:auto}
+.h{color:#1565c0}.g{color:#2e7d32}.n{color:#ef6c00}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.two{grid-template-columns:1fr}}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.sample{background:#fff;color:var(--ink);border:1px solid var(--line);font-family:Consolas,monospace;padding:4px 9px}
+.big{font-size:1.5rem;font-weight:700;margin:6px 0}
+.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+<header><h1>Login &amp; Authentication System using ε-NFA to NFA Conversion</h1></header>
+<nav>
+  <button style="background:#5c6bc0" onclick="showEnfa()">Show ε-NFA</button>
+  <button style="background:#00897b" onclick="calcClosure()">Calculate ε-Closure</button>
+  <button style="background:#ef6c00" onclick="convertBtn()">Convert ε-NFA → NFA</button>
+  <button style="background:#2e7d32" onclick="testNfa()">Test NFA</button>
+  <button style="background:#c62828" onclick="resetAll()">Reset</button>
+</nav>
+<div class="wrap">
+<aside>
+  <div class="card">
+    <h2>Real-life authentication simulation</h2>
+    <label for="u">Username (symbol U)</label><input type="text" id="u" autocomplete="off">
+    <label for="p">Password (symbol P)</label><input type="password" id="p">
+    <p style="margin:10px 0 4px"><button onclick="login()" style="width:100%">Login</button></p>
+    <small style="color:var(--mut)">Demo credentials: admin / admin123</small>
+    <fieldset id="sf">
+      <label>After the ε-move, choose one method</label>
+      <label style="color:var(--ink)"><input type="radio" name="m" value="OTP" checked> OTP (symbol O)</label>
+      <div id="otp" style="color:#ef6c00;font-size:.85rem">OTP not generated yet</div>
+      <input type="text" id="otpin" placeholder="Enter OTP" autocomplete="off">
+      <label style="color:var(--ink)"><input type="radio" name="m" value="FP"> Fingerprint (symbol F)</label>
+      <label style="color:var(--ink)"><input type="checkbox" id="fp"> Fingerprint matches registered one</label>
+      <p style="margin:10px 0 0"><button onclick="auth()" style="background:#2e7d32;width:100%">Authenticate</button></p>
+    </fieldset>
+    <div id="lres" class="big" style="color:#757575">—</div>
+    <div id="linfo" style="white-space:pre-line;font-size:.85rem"></div>
+  </div>
+</aside>
+<main>
+  <div class="card">
+    <svg id="svg" viewBox="0 0 900 285" role="img" aria-label="Automaton diagram"></svg>
+    <div class="legend">
+      <span><i style="background:#a5d6a7"></i>Initial</span><span><i style="background:#bbdefb"></i>Normal</span>
+      <span><i style="background:#ffe082"></i>Final</span><span><i style="background:#ef9a9a"></i>Failed (q6)</span>
+      <span><i style="background:#fff176"></i>Current</span><span><b style="border-color:#ef6c00;border-top-style:dashed"></b>ε-transition</span>
+      <span><b style="border-color:#2e7d32"></b>Accepted path</span><span><b style="border-color:#c62828"></b>Rejected path</span>
+    </div>
+  </div>
+  <div class="card" id="def"><h2>1. ε-NFA definition</h2><pre id="deftext"></pre></div>
+  <div class="card"><h2>2. ε-closure table</h2><div class="scroll" id="clos"><em>Press “Calculate ε-Closure”.</em></div></div>
+  <div class="card"><h2>3. ε-NFA → NFA conversion</h2>
+    <div class="two"><div><b>Original ε-NFA</b><div class="scroll" id="tE"></div></div>
+    <div><b>Converted NFA</b><div class="scroll" id="tN"><em>Press “Convert ε-NFA → NFA”.</em></div></div></div>
+    <div style="margin-top:14px"><b>After Conversion: NFA State Diagram (without ε-transitions)</b>
+      <svg id="nfaSvg" viewBox="0 0 900 285" role="img" aria-label="Converted NFA diagram"></svg>
+      <div style="font-size:.82rem;color:var(--mut)">This separate diagram shows the converted NFA after ε-transitions are removed.</div>
+    </div>
+    <pre id="log" style="margin-top:10px"></pre>
+    <div id="ver" class="g" style="font-weight:600;margin-top:6px"></div>
+  </div>
+  <div class="card" id="simcard"><h2>4. Input string simulator</h2>
+    <div class="row"><input type="text" id="inp" style="width:170px;font-family:Consolas,monospace" placeholder="e.g. U P O">
+      <button onclick="testNfa()" style="background:#2e7d32">Test NFA</button>
+      <button onclick="runTests()" style="background:#5c6bc0">Run all 5 test cases</button>
+      <span style="color:var(--mut)">Samples:</span>
+      <button class="sample" onclick="sample('U P O')">U P O</button><button class="sample" onclick="sample('U P F')">U P F</button>
+      <button class="sample" onclick="sample('U O')">U O</button><button class="sample" onclick="sample('P U O')">P U O</button>
+      <button class="sample" onclick="sample('U P O F')">U P O F</button></div>
+    <div id="res" class="big" style="color:#757575">—</div><div id="why" style="color:var(--mut);margin-bottom:8px"></div>
+    <div class="two"><div class="scroll"><b>Step-by-step processing</b><div id="steps"></div></div>
+    <div class="scroll"><b>Test cases</b><div id="tests"></div></div></div>
+  </div>
+</main>
+</div>
+
+<script>
+/* ======================= AUTOMATA MODEL (no DOM code) ======================= */
+const EPS = "ε";
+const STATES = ["q0","q1","q2","q3","q4","q5","q6"];
+const ALPHA = ["U","P","O","F"];                       // Σ
+const START = "q0", FINALS = new Set(["q5"]);
+const INFO = {q0:"Start",q1:"Username verified",q2:"Password verified",q3:"OTP authentication",
+              q4:"Fingerprint auth.",q5:"Success (final)",q6:"Auth. failed"};
+const TRANS = [["q0","U","q1"],["q1","P","q2"],["q2",EPS,"q3"],["q2",EPS,"q4"],["q3","O","q5"],["q4","F","q5"]];
+const TESTS = [["Test 1","U P O",true],["Test 2","U P F",true],["Test 3","U O",false],["Test 4","P U O",false],["Test 5","U P",false]];
+
+const mk = tr => { const d = {}; tr.forEach(([s,a,t]) => (d[s+"|"+a] ??= new Set()).add(t)); return d; };
+const tg = (d,s,a) => d[s+"|"+a] || new Set();                    // δ(s,a) as a set
+const fmt = s => s.size ? "{" + [...s].sort().join(", ") + "}" : "∅";
+const ENFA = {d: mk(TRANS), finals: FINALS};
+
+/* ε-closure(q): every state reachable from q using ONLY ε-moves (q included) */
+function closure(d, q){
+  const set = new Set([q]), trace = [], stack = [q];
+  while(stack.length){
+    const cur = stack.pop();
+    [...tg(d,cur,EPS)].sort().forEach(n => { if(!set.has(n)){ set.add(n); stack.push(n); trace.push(`${cur} --ε--> ${n}, add ${n}`); } });
+  }
+  return {set, trace};
+}
+const closureSet = (d, S) => { const r = new Set(); S.forEach(q => closure(d,q).set.forEach(x => r.add(x))); return r; };
+
+/* ε-NFA -> NFA :  δ'(p,a) = ε-closure( δ( ε-closure(p), a ) ),   F' = {p | ε-closure(p) ∩ F ≠ ∅} */
+function convert(){
+  const cl = {}; STATES.forEach(q => cl[q] = closure(ENFA.d,q).set);
+  const log = []; let n = 0, tr = [];
+  const step = (title, body="", res=null, label="Result:") => {
+    n++; log.push(`<b class="h">Step ${n}:</b>\n${title}\n${body}` + (res!==null ? `${label?label+"\n":""}<b class="g">${res}</b>\n` : "") + "\n");
+  };
+  STATES.forEach(p => {
+    const c = cl[p], members = [...c].sort();
+    if(c.size === 1){                                   // no ε-move: copy transitions
+      let b = ""; ALPHA.forEach(a => tg(ENFA.d,p,a).forEach(t => { b += `   ${p} --${a}--> ${t}\n`; tr.push([p,a,t]); }));
+      step(`Find ε-closure(${p}) = ${fmt(c)} - no ε-move, copy transitions.`, b || "   (no outgoing transitions)\n");
+      return;
+    }
+    step(`Find ε-closure(${p})`, "", fmt(c));
+    let b = ""; members.forEach(r => { const o = []; ALPHA.forEach(a => tg(ENFA.d,r,a).forEach(t => o.push(`${r} --${a}--> ${t}`))); b += `   ${r}: ${o.join(", ") || "no transitions"}\n`; });
+    step(`Check transitions from ${members.join(", ")}.`, b);
+    ALPHA.forEach(a => {
+      let body = ""; const reach = new Set();
+      members.forEach(r => tg(ENFA.d,r,a).forEach(s => { body += `   ${r} --${a}--> ${s}\n`; reach.add(s); }));
+      if(!reach.size) return;
+      const ns = closureSet(ENFA.d, reach);             // ε-closure of the targets
+      ns.forEach(t => tr.push([p,a,t]));
+      step(`For input ${a}:`, body, [...ns].sort().map(t => `${p} --${a}--> ${t}`).join("\n"), "Therefore:");
+    });
+  });
+  const nf = new Set(STATES.filter(p => [...cl[p]].some(q => FINALS.has(q))));
+  step("Final states: F' = { p | ε-closure(p) ∩ F ≠ ∅ }", "", fmt(nf));
+  let removed = ""; for(const k in ENFA.d){ const [s,a] = k.split("|"); if(a===EPS) [...ENFA.d[k]].sort().forEach(t => removed += `   ${s} --ε--> ${t}   (removed)\n`); }
+  step("Remove ε-transitions.", removed);
+  const seen = new Set([START]), todo = [START];        // drop transitions of unreachable states
+  while(todo.length){ const c = todo.pop(); tr.filter(t => t[0]===c).forEach(t => { if(!seen.has(t[2])){ seen.add(t[2]); todo.push(t[2]); } }); }
+  const kept = tr.filter(t => seen.has(t[0]));
+  step("Final NFA (no ε-transitions):", "", kept.map(t => `${t[0]} --${t[1]}--> ${t[2]}`).join("\n"), "");
+  const un = STATES.filter(q => !seen.has(q) && q !== "q6");
+  if(un.length) log.push(`<span class="n">Note: ${un.join(", ")} became unreachable (merged into q2), so their rows are empty in the NFA table.</span>\n`);
+  return {nfa: {d: mk(kept), finals: nf}, cl, log};
+}
+
+/* run tokens on the NFA, tracking the SET of current states */
+function sim(d, finals, tok){
+  let cur = new Set([START]); const steps = [];
+  for(let i = 0; i < tok.length; i++){
+    const sym = tok[i], nx = new Set(), ed = new Set();
+    cur.forEach(s => tg(d,s,sym).forEach(t => { nx.add(t); ed.add(s+">"+t); }));
+    steps.push({rem: tok.slice(i), before: cur, sym, after: nx, ed});
+    if(!nx.size) return {steps, ok:false, alive:cur, reason:`Dead end: no transition from ${fmt(cur)} on '${sym}' → q6 (authentication failed).`};
+    cur = nx;
+  }
+  const fin = new Set([...cur].filter(q => finals.has(q))), ok = fin.size > 0;
+  return {steps, ok, alive:cur, reason: ok ? `Input finished in final state ${fmt(fin)}.` : `Input finished in ${fmt(cur)}, which is not a final state.`};
+}
+function enfaAccepts(tok){                              // simulate the ORIGINAL ε-NFA (for verification)
+  let cur = closureSet(ENFA.d, new Set([START]));
+  for(const sym of tok){
+    const mv = new Set(); cur.forEach(s => tg(ENFA.d,s,sym).forEach(t => mv.add(t)));
+    cur = closureSet(ENFA.d, mv); if(!cur.size) return false;
+  }
+  return [...cur].some(q => FINALS.has(q));
+}
+function verify(){                                      // all strings over Σ up to length 5
+  let tested = 0, bad = 0; const acc = [];
+  const rec = t => { const a = enfaAccepts(t), b = sim(nfa.d, nfa.finals, t).ok; tested++;
+    if(a !== b) bad++; else if(a) acc.push(t.join(" ")); if(t.length < 5) ALPHA.forEach(x => rec([...t,x])); };
+  rec([]); return {tested, acc, bad};
+}
+const parse = s => { s = s.trim().toUpperCase().replace(/,/g," "); return !s ? [] : s.includes(" ") ? s.split(/\s+/) : s.split(""); };
+
+/* =============================== GUI =============================== */
+const $ = id => document.getElementById(id);
+const C = {init:"#a5d6a7",norm:"#bbdefb",fin:"#ffe082",fail:"#ef9a9a",cur:"#fff176",eps:"#ef6c00",tr:"#1565c0",ok:"#2e7d32",bad:"#c62828"};
+const POS = {q0:[75,125],q1:[210,125],q2:[345,125],q3:[500,55],q4:[500,195],q5:[660,125],q6:[810,195]}, R = 28;
+let nfa = null, mode = "eps", timer = null, logTimer = null, sess = [], otp = "";
+
+function draw(cur = new Set(), path = new Set(), pc = C.ok, cf = C.cur, failed = false, targetId = "svg", forceNfa = false){
+  const A = ((forceNfa || mode === "nfa") && nfa) ? nfa : ENFA, g = {};
+  for(const k in A.d){ const [s,a] = k.split("|"); A.d[k].forEach(t => (g[s+">"+t] ??= []).push(a)); }
+  let h = "<defs>" + [C.tr,C.eps,C.ok,C.bad].map(c => `<marker id="m${c.slice(1)}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`).join("") + "</defs>";
+  h += `<text x="10" y="18" font-weight="700" fill="#1f3a68">${A === nfa ? "Equivalent NFA (no ε-transitions)" : "ε-NFA (with ε-transitions)"}</text>`;
+  for(const k in g){
+    const [s,t] = k.split(">"), ls = g[k].sort((a,b) => [EPS,...ALPHA].indexOf(a) - [EPS,...ALPHA].indexOf(b));
+    const eps = ls.length === 1 && ls[0] === EPS, on = path.has(k), col = on ? pc : eps ? C.eps : C.tr;
+    const [x1,y1] = POS[s], [x2,y2] = POS[t], L = Math.hypot(x2-x1,y2-y1), ux = (x2-x1)/L, uy = (y2-y1)/L;
+    const sx = x1+ux*R, sy = y1+uy*R, ex = x2-ux*(R+3), ey = y2-uy*(R+3);
+    h += `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${col}" stroke-width="${on?4:2}" ${eps&&!on?'stroke-dasharray="6 4"':""} marker-end="url(#m${col.slice(1)})"/>`;
+    h += `<text x="${(sx+ex)/2+uy*14}" y="${(sy+ey)/2-ux*14+5}" text-anchor="middle" font-weight="700" font-size="15" fill="${col}">${ls.join(", ")}</text>`;
+  }
+  const [x0,y0] = POS[START];
+  h += `<line x1="12" y1="${y0}" x2="${x0-R-3}" y2="${y0}" stroke="#37474f" stroke-width="2" marker-end="url(#m${C.tr.slice(1)})"/><text x="14" y="${y0-10}" font-size="11">start</text>`;
+  STATES.forEach(q => {
+    const [x,y] = POS[q]; let fill = q===START ? C.init : A.finals.has(q) ? C.fin : q==="q6" ? C.fail : C.norm, st = "#37474f", w = 2, tc = "#000";
+    if(cur.has(q)){ fill = cf; st = "#6a1b9a"; w = 4; }
+    if(failed && q === "q6"){ fill = "#e53935"; st = "#7f0000"; w = 4; tc = "#fff"; }
+    h += `<circle cx="${x}" cy="${y}" r="${R}" fill="${fill}" stroke="${st}" stroke-width="${w}"/>`;
+    if(A.finals.has(q)) h += `<circle cx="${x}" cy="${y}" r="${R-5}" fill="none" stroke="${st}" stroke-width="2"/>`;
+    h += `<text x="${x}" y="${y+5}" text-anchor="middle" font-weight="700" font-size="16" fill="${tc}">${q}</text>`;
+    h += `<text x="${x}" y="${y + (q==="q3" ? -R-8 : R+15)}" text-anchor="middle" font-size="11" fill="#455a64">${INFO[q]}</text>`;
+  });
+  $(targetId).innerHTML = h;
+}
+
+function table(A, cols){
+  return "<table><tr><th>State</th>" + cols.map(c => `<th>${c}</th>`).join("") + "</tr>" +
+    STATES.map(q => `<tr class="${q===START?"i":A.finals.has(q)?"f":q==="q6"?"x":""}"><td>${q===START?"→ ":""}${A.finals.has(q)?"* ":""}${q}</td>` +
+      cols.map(c => `<td>${fmt(tg(A.d,q,c))}</td>`).join("") + "</tr>").join("") + "</table>";
+}
+function defText(){
+  let t = `ε-NFA   M = (Q, Σ, δ, q0, F)\n\nQ  = ${fmt(new Set(STATES))}\nΣ  = {${ALPHA.join(", ")}}   (U=Username, P=Password, O=OTP, F=Fingerprint)\nq0 = ${START}\nF  = ${fmt(FINALS)}\n\nδ:\n`;
+  TRANS.forEach(([s,a,d]) => t += `   ${s} --${a}--> ${d}\n`);
+  t += "\nMeaning of states:\n" + STATES.map(q => `   ${q} = ${INFO[q]}`).join("\n");
+  t += "\n\nThe ε-moves take q2 automatically to BOTH q3 (OTP) and q4 (Fingerprint) without reading input.\nU P alone means the password is verified but the full authentication string is not accepted until O or F is supplied.\n";
+  t += "NFA  M' = (Q, Σ, δ', q0, F'),  δ'(p,a) = ε-closure(δ(ε-closure(p), a))";
+  if(nfa) t += `\nF' = ${fmt(nfa.finals)}   (computed by the conversion)`;
+  return t;
+}
+const goto = id => $(id).scrollIntoView({behavior:"smooth", block:"start"});
+
+function showEnfa(){ clearTimeout(timer); mode = "eps"; draw(); $("deftext").textContent = defText(); goto("def"); }
+function calcClosure(){
+  clearTimeout(timer); mode = "eps";
+  $("clos").innerHTML = "<table><tr><th>State</th><th>ε-closure</th><th>How it was computed</th></tr>" +
+    STATES.map(q => { const c = closure(ENFA.d,q); return `<tr><td>ε-closure(${q})</td><td>${fmt(c.set)}</td><td>${c.trace.join("; ") || "no ε-transitions, so only itself"}</td></tr>`; }).join("") + "</table>";
+  draw(closure(ENFA.d,"q2").set); $("clos").scrollIntoView({behavior:"smooth", block:"center"});
+}
+function doConvert(animate){
+  clearTimeout(logTimer); clearTimeout(timer);
+  const r = convert(); nfa = r.nfa; mode = "nfa"; draw();
+  draw(new Set(), new Set(), C.ok, C.cur, false, "nfaSvg", true);
+  $("tN").innerHTML = table(nfa, ALPHA); $("deftext").textContent = defText(); $("log").innerHTML = ""; $("ver").textContent = "";
+  const v = verify(), msg = `Verification: ${v.tested} strings (length ≤ 5) tested; ε-NFA and NFA disagree on ${v.bad}. Accepted by both: ${v.acc.join(", ") || "none"} → ` + (v.bad ? "NOT EQUIVALENT ✗" : "EQUIVALENT ✓");
+  let i = 0;
+  const next = () => { if(i < r.log.length){ $("log").insertAdjacentHTML("beforeend", r.log[i++]); $("log").scrollTop = 1e6; if(animate) logTimer = setTimeout(next, 600); else next(); } else $("ver").textContent = msg; };
+  next();
+}
+function convertBtn(){ doConvert(true); goto("tN"); }
+function ensure(){ if(!nfa) doConvert(false); mode = "nfa"; }
+
+function run(tok, done){
+  clearTimeout(timer); ensure();
+  const r = sim(nfa.d, nfa.finals, tok); $("inp").value = tok.join(" ");
+  $("steps").innerHTML = "<table><tr><th>Step</th><th>Input</th><th>Current state</th><th>Symbol</th><th>Next state</th><th>Final?</th></tr>" +
+    r.steps.map((s,i) => `<tr id="s${i}"><td>${i+1}</td><td>${s.rem.join(" ")}</td><td>${fmt(s.before)}</td><td>${s.sym}</td><td>${s.after.size ? fmt(s.after) : "∅ → q6 ✗"}</td><td>${[...s.after].some(q => nfa.finals.has(q)) ? "Yes ✓" : "No"}</td></tr>`).join("") +
+    `<tr id="send" class="${r.ok?"pass":"bad"}"><td>End</td><td>ε</td><td>${fmt(r.alive)}</td><td>-</td><td>-</td><td>${r.ok?"ACCEPT":"REJECT"}</td></tr></table>`;
+  $("res").textContent = "Processing …"; $("res").style.color = "#757575"; $("why").textContent = "";
+  draw(new Set([START]));
+  let i = 0; const path = new Set();
+  const go = () => {
+    document.querySelectorAll("tr.cur").forEach(e => e.classList.remove("cur"));
+    if(i < r.steps.length){
+      const s = r.steps[i]; s.ed.forEach(e => path.add(e)); $("s"+i).classList.add("cur");
+      if(s.after.size) draw(s.after, path); i++; timer = setTimeout(go, 700);
+    } else {
+      $("send").classList.add("cur");
+      draw(r.ok ? r.alive : new Set(["q6"]), path, r.ok ? C.ok : C.bad, r.ok ? "#69f0ae" : "#ff8a80", !r.ok);
+      (done || showRes)(r);
+    }
+  };
+  timer = setTimeout(go, 400);
+}
+function showRes(r){ $("res").textContent = r.ok ? "ACCEPTED ✓" : "REJECTED ✗"; $("res").style.color = r.ok ? C.ok : C.bad; $("why").textContent = r.reason; }
+function testNfa(){ run(parse($("inp").value)); goto("simcard"); }
+function sample(s){ run(parse(s)); goto("simcard"); }
+function runTests(){
+  ensure(); const w = v => v ? "ACCEPT" : "REJECT";
+  $("tests").innerHTML = "<table><tr><th>Test</th><th>Input</th><th>Expected</th><th>ε-NFA</th><th>NFA</th><th>Status</th></tr>" +
+    TESTS.map(([n,s,e]) => { const t = parse(s), a = enfaAccepts(t), b = sim(nfa.d, nfa.finals, t).ok, ok = b === e && a === b;
+      return `<tr class="${ok?"pass":"bad"}"><td>${n}</td><td>${s}</td><td>${w(e)}</td><td>${w(a)}</td><td>${w(b)}</td><td>${ok?"PASS ✓":"FAIL ✗"}</td></tr>`; }).join("") + "</table>";
+  goto("simcard");
+}
+
+/* ----- login simulation: each step produces a symbol; the NFA decides the result ----- */
+function lstat(t, c, info){ $("lres").textContent = t; $("lres").style.color = c; $("linfo").textContent = info; }
+function login(){
+  clearTimeout(timer); clearTimeout(logTimer);
+  const u = $("u").value.trim(), p = $("p").value;
+  let t = [], okUser = false, okPass = false, why = "";
+  if(u === "admin"){
+    okUser = true; t.push("U");
+    if(p === "admin123"){ okPass = true; t.push("P"); }
+    else { t.push("X"); why = "Username verified, but password is incorrect. Invalid symbol X has no NFA transition."; }
+  } else {
+    t.push("X");
+    why = "Username not recognised. Invalid symbol X has no NFA transition from the start state.";
+  }
+  sess = okPass ? ["U","P"] : [];
+  $("sf").disabled = !okPass;
+  $("otpin").value = "";
+  $("fp").checked = false;
+  otp = "";
+  $("otp").textContent = okPass ? "" : "OTP not generated — verify username and password first";
+  if(okPass){
+    otp = String(100000 + Math.floor(Math.random()*900000));
+    $("otp").textContent = "Simulated SMS OTP: " + otp;
+    lstat("Password verified ✓", C.tr, "Username and password are correct.\nThe sequence U P reaches q2, the authentication-choice state.\nChoose OTP or fingerprint to complete authentication.");
+    $("inp").value = "U P";
+    $("res").textContent = "PASSWORD VERIFIED — AUTHENTICATION PENDING";
+    $("res").style.color = C.tr;
+    $("why").textContent = "U P reaches q2. This is an accepted login stage, not a completed authentication; continue with O (OTP) or F (fingerprint).";
+    $("steps").innerHTML = "<table><tr><th>Step</th><th>Input</th><th>Current state</th><th>Symbol</th><th>Next state</th><th>Stage</th></tr>" +
+      "<tr><td>1</td><td>U P</td><td>{q0}</td><td>U</td><td>{q1}</td><td>Username verified</td></tr>" +
+      "<tr><td>2</td><td>P</td><td>{q1}</td><td>P</td><td>{q2}</td><td>Password verified</td></tr>" +
+      "<tr class='pass'><td>End</td><td>ε</td><td>{q2}</td><td>-</td><td>-</td><td>Continue with O or F</td></tr></table>";
+    draw(new Set(["q2"]), new Set(["q0>q1","q1>q2"]), C.ok, "#fff176", false);
+    mode = "nfa";
+  } else {
+    lstat("ACCESS DENIED ✗", C.bad, why);
+    run(t, r => {
+      showRes(r);
+      lstat("ACCESS DENIED ✗", C.bad, why + "\nAutomaton result: rejected; failure state q6 is highlighted.");
+    });
+  }
+}
+function auth(){
+  clearTimeout(timer); clearTimeout(logTimer);
+  if(sess[0] !== "U" || sess[1] !== "P"){
+    lstat("Login first", C.bad, "Complete username and password verification first."); return;
+  }
+  const method = document.querySelector("input[name=m]:checked").value;
+  let t = ["U","P"], why = "";
+  if(method === "OTP"){
+    if($("otpin").value.trim() === otp && otp !== "") t.push("O");
+    else { t.push("X"); why = "Wrong or missing OTP: symbol O was not produced, so the authentication sequence is rejected."; }
+  } else {
+    if($("fp").checked) t.push("F");
+    else { t.push("X"); why = "Fingerprint did not match: symbol F was not produced, so the authentication sequence is rejected."; }
+  }
+  run(t, r => {
+    showRes(r);
+    const info = `Authentication method: ${method === "OTP" ? "OTP (O)" : "Fingerprint (F)"}\nSymbols processed: ${t.join(" ")}\nAutomaton result: ${r.ok ? "accepted at q5" : "rejected; failure state q6 highlighted"}`;
+    if(r.ok) lstat("ACCESS GRANTED ✓", C.ok, info);
+    else lstat("ACCESS DENIED ✗", C.bad, why + "\n" + info);
+  });
+}
+
+function resetAll(){
+  clearTimeout(timer); clearTimeout(logTimer); nfa = null; mode = "eps"; sess = []; otp = "";
+  ["u","p","otpin","inp"].forEach(i => $(i).value = ""); $("fp").checked = false; document.querySelector("input[name=m][value=OTP]").checked = true;
+  $("otp").textContent = "OTP not generated yet"; $("sf").disabled = true; lstat("—", "#757575", "");
+  $("tE").innerHTML = table(ENFA, [...ALPHA, EPS]); $("tN").innerHTML = "<em>Press “Convert ε-NFA → NFA”.</em>";
+  $("clos").innerHTML = "<em>Press “Calculate ε-Closure”.</em>"; $("log").innerHTML = ""; $("ver").textContent = "";
+  $("steps").innerHTML = ""; $("tests").innerHTML = ""; $("res").textContent = "—"; $("res").style.color = "#757575"; $("why").textContent = "";
+  $("deftext").textContent = defText(); draw(); $("nfaSvg").innerHTML = ""; window.scrollTo({top:0, behavior:"smooth"});
+}
+resetAll();
+</script>
+</body>
+</html>
